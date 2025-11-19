@@ -1,20 +1,7 @@
-﻿using System;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Text;
 
 namespace IBKR_Service.Config
 {
-    public class IbkrSettings
-    {
-        public string GatewayUrl { get; set; } = string.Empty;
-        public string SessionCookie { get; set; } = string.Empty;
-    }
-
-    public interface IApiMessenger {
-        Task<string> PostAsync(string url, string jsonBody);
-        Task<string> GetAsync(string url);
-    }
-
     public class ApiMessenger : IApiMessenger { 
         private HttpClient _httpClient;
         private readonly string baseUrl = "https://localhost:5000/v1/api";
@@ -34,12 +21,12 @@ namespace IBKR_Service.Config
 
             httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
             httpClient.DefaultRequestHeaders.Add("User-Agent", "Console");
-            httpClient.DefaultRequestHeaders.Add("x-sess-uuid", "0.cb2f1402.1762295566.75ba690a");
-            httpClient.DefaultRequestHeaders.Add("Cookie", "x-sess-uuid=0.cb2f1402.1762295566.75ba690a");
+            //httpClient.DefaultRequestHeaders.Add("x-sess-uuid", "0.cb2f1402.1762295566.75ba690a");
+            //httpClient.DefaultRequestHeaders.Add("Cookie", "x-sess-uuid=0.cb2f1402.1762295566.75ba690a");
             return httpClient;
         }
 
-        public async Task<string> PostAsync(string url, string jsonBody) {
+        public async Task<string> PostAsyncJsonResponse(string url, string jsonBody) {
 
             var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
             var response = await _httpClient.PostAsync(url, content);
@@ -47,11 +34,17 @@ namespace IBKR_Service.Config
             return responseJson;
         }
 
-        public async Task<string> GetAsync(string url)
+        public async Task<string> GetAsyncJsonResponse(string url)
         {
             var response = await _httpClient.GetAsync(url);
             var responseJson = await response.Content.ReadAsStringAsync();
             return responseJson;
+        }
+
+        public async Task<HttpResponseMessage> GetAsync(string url)
+        {
+            var response = await _httpClient.GetAsync(url);
+            return response;
         }
     }
 }

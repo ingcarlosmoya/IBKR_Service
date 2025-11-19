@@ -36,9 +36,7 @@ namespace IBKR_Service
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         @"MetaQuotes\Terminal\Common\Files\mt5_ibkr_events.jsonl");
 
-        private readonly string baseUrl = "https://localhost:5000/v1/api";
-        const string tickle_Endpoint = "/tickle";
-        const string pnl_Endpoint = "/iserver/account/pnl/partitioned";
+        
         const string batchFilePath = @"C:\Users\ingca\clientportal.gw\bin\run.bat"; // Replace with your batch file path
         const string yamlFilePath = @"C:\Users\ingca\clientportal.gw\root\conf.yaml"; // Replace with your batch file path
 
@@ -65,11 +63,12 @@ namespace IBKR_Service
 
 
         private HttpClient _httpClient;
-        private readonly IbkrSettings _ibkr;
+        private readonly IbkrSettings _ibkrSettings;
         private FileSystemWatcher _watcher;
 
-        public Worker(ILogger<Worker> logger, ILogger<ResponseHandler> loggerHandler, ApiMessenger apiMessenger)
+        public Worker(IOptions<IbkrSettings> ibkrSettings, ILogger<Worker> logger, ILogger<ResponseHandler> loggerHandler, ApiMessenger apiMessenger)
         {
+            _ibkrSettings = ibkrSettings.Value;
             _logger = logger;
             _loggerHandler = loggerHandler;
             _apiMessenger = apiMessenger;
@@ -97,7 +96,7 @@ namespace IBKR_Service
             {
                 if (_logger.IsEnabled(LogLevel.Information))
                 {
-                    SingleEndpointCaller(tickle_Endpoint, stoppingToken);
+                    SingleEndpointCaller();
                     CheckPnL(stoppingToken);
                 }
                 await Task.Delay(500, stoppingToken);
@@ -134,7 +133,7 @@ namespace IBKR_Service
                     process.Start();
                     process.BeginOutputReadLine();
                     process.BeginErrorReadLine();
-                    
+                    Console.ReadKey();
 
                     _logger.LogInformation("IBKR Client Portal Gateway started.");
                 }
@@ -145,19 +144,21 @@ namespace IBKR_Service
             }
         }
 
-        private async void SingleEndpointCaller(string endpoint, CancellationToken stoppingToken)
+        private async void SingleEndpointCaller()
         {
             try
             {
-                var response = await _httpClient.GetAsync($"{baseUrl}{tickle_Endpoint}", stoppingToken);
-                var content = await response.Content.ReadAsStringAsync();
-                var responseLog = ($"Response for {tickle_Endpoint}: {response.StatusCode}");
-                if (!response.IsSuccessStatusCode)
+
+                var response = await _apiMessenger.GetAsync($"{_ibkrSettings.GatewayUrl}{_ibkrSettings.TickleEndpoint}");
+                var responseLog = ($"Response for {_ibkrSettings.TickleEndpoint}: {response.StatusCode}");
+                if (response.IsSuccessStatusCode)
+                    _logger.LogInformation(responseLog);
+                else
                     _logger.LogError(responseLog);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "HTTP call failed");
+                throw;
             }
         }
 
@@ -165,9 +166,8 @@ namespace IBKR_Service
         {
             try
             {
-                var response = await _apiMessenger.GetAsync($"{baseUrl}{pnl_Endpoint}");
+                var response = await _apiMessenger.GetAsyncJsonResponse($"{_ibkrSettings.GatewayUrl}{_ibkrSettings.PnlEndpoint}");
                 _checkPnlHanlder.Handle(response);
- 
             }
             catch (Exception)
             {
@@ -230,12 +230,11 @@ namespace IBKR_Service
 
         private async Task CreateOrder(Signal signal)
         {
-            ErrorResponse postResponse = null;
             var createOrder = new CreateOrder
             {
                 orders = new List<Order>(){  new Order()
             {
-                acctId = "DUN296642",
+                acctId = _ibkrSettings.AccountId,
                 conid = signal.AcctId,
                 orderType = "MKT",
                 quantity = signal.AdjustedLots,
@@ -246,7 +245,7 @@ namespace IBKR_Service
             } }
             };
             var jsonRequest = JsonConvert.SerializeObject(createOrder);
-            var jsonResponse = await _apiMessenger.PostAsync($"{baseUrl}/iserver/account/DUN296642/orders", jsonRequest);
+            var jsonResponse = await _apiMessenger.PostAsyncJsonResponse($"{_ibkrSettings.GatewayUrl}/iserver/account/{_ibkrSettings.AccountId}/orders", jsonRequest);
             _successfulResponseHanlder.Handle(jsonResponse);
 
         }
@@ -305,7 +304,7 @@ namespace IBKR_Service
                 case "EURUSD":
                     signal.AdjustedSymbol = symbol.ticket;
                     signal.AcctId = symbol.conid;
-                    signal.AdjustedLots = signal.Lots < 1 ? 20000 : signal.Lots*20000;
+                    signal.AdjustedLots = signal.Lots < 1 ? 20000 : signal.Lots * 20000;
                     return;
                 case "USDJPY":
                     signal.AdjustedSymbol = symbol.ticket;

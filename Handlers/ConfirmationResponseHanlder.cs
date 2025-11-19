@@ -36,7 +36,7 @@ namespace IBKR_Service.Handlers
                         {
                             var replyRequest = new ReplyRequest { confirmed = true };
                             var jsonRequest = JsonConvert.SerializeObject(replyRequest);
-                            var replyResponse = await _messenger.PostAsync($"{baseUrl}/iserver/reply/{confirmation.id}", jsonRequest);
+                            var replyResponse = await _messenger.PostAsyncJsonResponse($"{baseUrl}/iserver/reply/{confirmation.id}", jsonRequest);
 
                             //var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
                             //var _httpClient = SetHttpClient();
