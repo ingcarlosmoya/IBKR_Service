@@ -10,6 +10,9 @@ namespace IBKR_Service.Config
         public string AccountId { get; set; } = string.Empty;
         public string TickleEndpoint { get; set; } = string.Empty;
         public string PnlEndpoint { get; set; } = string.Empty;
-        
+        public string WorkingDirectory { get; set; } = string.Empty;
+        public string CommandArguments { get; set; } = string.Empty;
+        public string OrdersFilePath { get; set; } = string.Empty;
+
     }
 }

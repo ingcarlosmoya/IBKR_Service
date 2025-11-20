@@ -1,23 +1,9 @@
-﻿using IBApi;
-using IBKR_Service.Config;
+﻿using IBKR_Service.Config;
 using IBKR_Service.Handlers;
-using Microsoft.Extensions.FileSystemGlobbing;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Net;
-using System.Net.Http;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices.Marshalling;
-using System.Security.Principal;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
 
 namespace IBKR_Service
@@ -32,20 +18,16 @@ namespace IBKR_Service
     {
 
 
-        private static string eventsFile = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        @"MetaQuotes\Terminal\Common\Files\mt5_ibkr_events.jsonl");
+        private string _ordersFilePath;
 
-        
-        const string batchFilePath = @"C:\Users\ingca\clientportal.gw\bin\run.bat"; // Replace with your batch file path
-        const string yamlFilePath = @"C:\Users\ingca\clientportal.gw\root\conf.yaml"; // Replace with your batch file path
+
 
         // Tabla de equivalencias MT5 -> IBKR
         private static Dictionary<string, Symbol> symbolMap = new Dictionary<string, Symbol>
         {
             { "NAS100", new Symbol{ticket = "MNQ", conid=730283094 } },       // NAS100 CFD -> Micro NASDAQ
             { "US30",   new Symbol{ticket = "MYM", conid=362688015 } },       // US30 CFD   -> Mini Dow
-            { "XAUUSD", new Symbol{ticket = "XAUUSD", conid=58430358 } },    // Oro CFD -> Oro spot
+            { "XAUUSD", new Symbol{ticket = "MGC", conid=79702479 } },    // Oro CFD -> Oro spot
             { "EURUSD", new Symbol{ticket = "EUR.USD", conid=12087792 } },    // Forex
             { "USDJPY", new Symbol{ticket = "USD.JPY", conid=15016059 } },    // Forex
             { "GBPUSD", new Symbol{ticket = "GBP.USD", conid=12087797 } }    // Forex
@@ -80,25 +62,32 @@ namespace IBKR_Service
             _successfulResponseHanlder.SetNext(_confirmationResponseHanlder);
             _confirmationResponseHanlder.SetNext(_errorResponseHanlder);
             _checkPnlHanlder.SetNext(_errorResponseHanlder);
+
+            _ordersFilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        _ibkrSettings.OrdersFilePath);
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("MT5 -> IBKR Bridge started...");
-            _logger.LogInformation("Montoring file: " + eventsFile);
-
-
             _logger.LogInformation("Testing IBKR connection...");
-            StartCLientPortal();
-            Check();
 
+            bool isOrdersFileReady = false;
+
+            StartCLientPortal();
+
+            while (!isOrdersFileReady) {
+                isOrdersFileReady = CheckOrdersFileExists();
+            }
+            
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                if (_logger.IsEnabled(LogLevel.Information))
-                {
-                    SingleEndpointCaller();
-                    CheckPnL(stoppingToken);
-                }
+                    if (_logger.IsEnabled(LogLevel.Information))
+                    {
+                        SingleEndpointCaller();
+                        CheckPnL(stoppingToken);
+                    }
                 await Task.Delay(500, stoppingToken);
             }
         }
@@ -111,8 +100,8 @@ namespace IBKR_Service
                 {
                     //ProcessStartInfo startInfo = new ProcessStartInfo();
                     process.StartInfo.FileName = "cmd.exe"; // The executable to run the batch file
-                    process.StartInfo.Arguments = "/c bin\\run.bat root\\conf.yaml"; ; // /C executes the command and then terminates
-                    process.StartInfo.WorkingDirectory = @"C:\Users\ingca\clientportal.gw"; // 🔹 adjust to your real path
+                    process.StartInfo.Arguments = _ibkrSettings.CommandArguments; ; // /C executes the command and then terminates
+                    process.StartInfo.WorkingDirectory = _ibkrSettings.WorkingDirectory; // 🔹 adjust to your real path
                     process.StartInfo.UseShellExecute = false; // Do not use the OS shell to start the process
                     process.StartInfo.RedirectStandardOutput = true; // Redirect output to capture it in C#
                     process.StartInfo.CreateNoWindow = true; // Do not create a new window for the command prompt
@@ -133,9 +122,11 @@ namespace IBKR_Service
                     process.Start();
                     process.BeginOutputReadLine();
                     process.BeginErrorReadLine();
+                    Console.WriteLine("IBKR Client Portal Gateway started.");
+                    Console.WriteLine("Press any key to continue...");
                     Console.ReadKey();
 
-                    _logger.LogInformation("IBKR Client Portal Gateway started.");
+
                 }
             }
             catch (Exception ex)
@@ -175,19 +166,20 @@ namespace IBKR_Service
             }
         }
 
-        private void Check()
+        private bool CheckOrdersFileExists()
         {
 
-            if (!File.Exists(eventsFile))
+            if (!File.Exists(_ordersFilePath))
             {
-                _logger.LogWarning("El archivo no existe todavía. Asegúrate que el EA en MT5 está generando logs.");
+                _logger.LogError("El archivo no existe todavía. Asegúrate que el EA en MT5 está generando logs.");
+                return false;
             }
 
 
             _watcher = new FileSystemWatcher();
 
-            _watcher.Path = Path.GetDirectoryName(eventsFile)!;
-            _watcher.Filter = Path.GetFileName(eventsFile);
+            _watcher.Path = Path.GetDirectoryName(_ordersFilePath)!;
+            _watcher.Filter = Path.GetFileName(_ordersFilePath);
             _watcher.NotifyFilter = NotifyFilters.LastWrite;
 
             _watcher.Changed += OnChanged;
@@ -195,13 +187,15 @@ namespace IBKR_Service
 
             _logger.LogInformation("Esperando eventos...");
 
+            return true;
+
         }
 
         private async void OnChanged(object sender, FileSystemEventArgs e)
         {
             try
             {
-                var lines = File.ReadAllLines(eventsFile);
+                var lines = File.ReadAllLines(_ordersFilePath);
                 if (lines.Length == 0) return;
 
                 var lastLine = lines[0]; // última línea
