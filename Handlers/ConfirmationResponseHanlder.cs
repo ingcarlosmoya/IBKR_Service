@@ -1,27 +1,20 @@
 ﻿using IBKR_Service.Config;
-using Microsoft.Extensions.Logging;
+using IBKR_Service.Services;
+using IBKR_TradeBridge;
+using IBKR_TradeBridge.Config;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
-using System.Text;
 
 namespace IBKR_Service.Handlers
 {
     public class ConfirmationResponseHanlder : ResponseHandler
     {
-        string baseUrl = "https://localhost:5000/v1/api";
 
-        public ConfirmationResponseHanlder(ILogger<ResponseHandler> logger, ApiMessenger messenger) : base(logger, messenger)
+        public ConfirmationResponseHanlder(ILogger<Worker> logger, ApiMessenger messenger, IOptions<BridgeSettings> bridgeSettings) : base(logger, messenger, bridgeSettings)
         {
         }
 
-
-
-        //public ConfirmationResponseHanlder(ILogger<ResponseHandler> logger, ApiMessenger messenger) : base(messenger)
-        //{
-        //    _logger = logger;
-        //}
-
-
-        public override async void Handle(string jsonResponse)
+        public override async Task Handle(string jsonResponse, ResponseHandler? middleWorkHandler)
         {
             try
             {
@@ -36,14 +29,9 @@ namespace IBKR_Service.Handlers
                         {
                             var replyRequest = new ReplyRequest { confirmed = true };
                             var jsonRequest = JsonConvert.SerializeObject(replyRequest);
-                            var replyResponse = await _messenger.PostAsyncJsonResponse($"{baseUrl}/iserver/reply/{confirmation.id}", jsonRequest);
-
-                            //var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-                            //var _httpClient = SetHttpClient();
-                            //var response2 = await _httpClient.PostAsync($"{baseUrl}/iserver/reply/{confirmation.id}", content);
-                            //var responseBody = await replyResponse.Content.ReadAsStringAsync();
-                            var succesfulResponseHandler = new SuccessfulResponseHanlder(_logger, _messenger);
-                            succesfulResponseHandler.Handle(replyResponse);
+                            var replyResponse = await _apiMessenger.PostAsyncJsonResponse($"{_bridgeSettings}/iserver/reply/{confirmation.id}", jsonRequest);
+                            if (middleWorkHandler != null)
+                                await middleWorkHandler.Handle(replyResponse);
                         }
                     }
                 }
@@ -52,7 +40,7 @@ namespace IBKR_Service.Handlers
             catch (Exception)
             {
                 if (_next != null)
-                    _next.Handle(jsonResponse);
+                    await _next.Handle(jsonResponse);
             }
         }
     }

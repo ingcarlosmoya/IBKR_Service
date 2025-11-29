@@ -2,6 +2,15 @@
 
 using IBKR_Service;
 using IBKR_Service.Config;
+using IBKR_Service.Handlers;
+using IBKR_Service.Interfaces;
+using IBKR_Service.Services;
+using IBKR_TradeBridge;
+using IBKR_TradeBridge.Adapters;
+using IBKR_TradeBridge.Config;
+using IBKR_TradeBridge.Handlers;
+using IBKR_TradeBridge.Interfaces;
+using IBKR_TradeBridge.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System;
@@ -46,49 +55,46 @@ using System.Net.Http;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddHttpClient();
 
-//// ✅ Define an HttpClient that ignores invalid SSL certs
-//builder.Services.AddHttpClient("UnsafeHttpClient", client =>
-//{
-//    client.BaseAddress = new Uri("https://127.0.0.1:5000"); // or your IBKR URL
-//})
-//.ConfigurePrimaryHttpMessageHandler(() =>
-//    new HttpClientHandler
-//    {
-//        // 🔥 This line forces .NET to accept invalid/self-signed certs
-//        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-//    });
-
-
-// ✅ Define an HttpClient that ignores invalid SSL certs
-//builder.Services.AddHttpClient("IBKR", client =>
-//{
-//    client.BaseAddress = new Uri("https://localhost:5000"); // or your IBKR URL
-//    client.DefaultRequestHeaders.Add("Accept", "application/json");
-//})
-
-//.ConfigurePrimaryHttpMessageHandler(() =>
-// {
-//     return new HttpClientHandler
-//     {
-//         // ⚠️ Solo para entornos locales o certificados autofirmados
-//         ServerCertificateCustomValidationCallback = (HttpRequestMessage, cert, chain, errors) => true
-//     };
-// });
-//.ConfigurePrimaryHttpMessageHandler(() =>
-//    new HttpClientHandler
-//    {
-//        // 🔥 This line forces .NET to accept invalid/self-signed certs
-//        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-//    });
-
 builder.Services.AddSingleton<ApiMessenger>();
 
 // ✅ Register your Worker
 builder.Services.Configure<IbkrSettings>(
     builder.Configuration.GetSection("IBKR")
 );
-builder.Services.AddHostedService<Worker>();
+//builder.Services.AddHostedService<Worker>();
 //builder.Services.AddHostedService<ESocketWorker>();
+
+
+
+
+
+
+builder.Services.Configure<BridgeSettings>(builder.Configuration.GetSection("BridgeSettings"));
+
+// Core registrations
+builder.Services.AddSingleton<IIbkrClient, IbkrClient>();
+builder.Services.AddSingleton<IOrderPipeline, OrderPipeline>();
+builder.Services.AddSingleton<IOrderAdapter, CfdToFutureAdapter>();
+builder.Services.AddSingleton<IOrderRepository, OrderRepository>();
+builder.Services.AddSingleton<IMt5Listener, Mt5FileListener>();
+builder.Services.AddSingleton<ApiMessenger>();
+
+// Pipeline handlers (order matters)
+builder.Services.AddTransient<IOrderHandler, SymbolValidationHandler>();
+builder.Services.AddTransient<IOrderHandler, SymbolMappingHandler>();
+builder.Services.AddTransient<IOrderHandler, RiskCheckHandler>();
+builder.Services.AddTransient<IOrderHandler, BuildIbkrOrderHandler>();
+builder.Services.AddTransient<IOrderHandler, SendToIbkrHandler>();
+builder.Services.AddTransient<IOrderHandler, LoggingHandler>();
+
+builder.Services.AddTransient<SuccessfulResponseHanlder>();
+builder.Services.AddTransient<ConfirmationResponseHanlder>();
+builder.Services.AddTransient<ErrorResponseHanlder>();
+builder.Services.AddTransient<CheckPnlResponseHanlder>();
+
+
+
+builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
 host.Run();

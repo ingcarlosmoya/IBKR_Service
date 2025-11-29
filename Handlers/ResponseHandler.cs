@@ -1,4 +1,9 @@
 ﻿using IBKR_Service.Config;
+using IBKR_Service.Interfaces;
+using IBKR_Service.Services;
+using IBKR_TradeBridge;
+using IBKR_TradeBridge.Config;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,23 +15,24 @@ namespace IBKR_Service.Handlers
 {
 
 
-    public abstract class ResponseHandler
+    public abstract class ResponseHandler :IResponseHandler
     {
-        protected ResponseHandler? _next;
-        protected ILogger<ResponseHandler> _logger;
-        protected ApiMessenger _messenger;
+        protected IResponseHandler? _next;
+        protected ILogger<Worker> _logger;
+        protected IApiMessenger _apiMessenger;
+        protected BridgeSettings _bridgeSettings;
 
+        public abstract Task Handle(string jsonResponse, ResponseHandler? middleWorkHandler = null);
 
-        public abstract void Handle(string jsonResponse);
-
-        public void SetNext(ResponseHandler handler)
+        public void SetNext(IResponseHandler handler)
         {
             _next = handler;
         }
 
-        public ResponseHandler(ILogger<ResponseHandler> logger, ApiMessenger messenger) { 
+        public ResponseHandler(ILogger<Worker> logger, ApiMessenger messenger, IOptions<BridgeSettings> bridgeSettings) { 
             _logger = logger;
-            _messenger = messenger;
+            _apiMessenger = messenger;
+            _bridgeSettings= bridgeSettings.Value;
         }
     }
 }

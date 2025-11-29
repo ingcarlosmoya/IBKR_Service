@@ -1,15 +1,20 @@
 ﻿using IBKR_Service.Config;
+using IBKR_Service.Interfaces;
+using IBKR_Service.Services;
+using IBKR_TradeBridge;
+using IBKR_TradeBridge.Config;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json.Linq;
 
 namespace IBKR_Service.Handlers
 {
     public class CheckPnlResponseHanlder : ResponseHandler
     {
-        public CheckPnlResponseHanlder(ILogger<ResponseHandler> logger, ApiMessenger messenger) : base(logger, messenger)
+        public CheckPnlResponseHanlder(ILogger<Worker> logger, ApiMessenger messenger, IOptions<BridgeSettings> bridgeSettings) : base(logger, messenger, bridgeSettings)
         {
         }
 
-        public override void Handle(string jsonResponse)
+        public override Task Handle(string jsonResponse, ResponseHandler? middleWorkHandler = null)
         {
             try
             {
@@ -19,9 +24,6 @@ namespace IBKR_Service.Handlers
                 {
                     dpl = (string)response["upnl"]["DUN296642.Core"]["dpl"];
                     _logger.LogInformation($">>> Pnl: {dpl}");
-                    //var responseLog = ($"Response for tickle endpoint: {response.StatusCode}");
-                    //if (!response.IsSuccessStatusCode)
-                    //    _logger.LogError(responseLog);
                 }
 
             }
@@ -30,6 +32,8 @@ namespace IBKR_Service.Handlers
                 if (_next != null)
                     _next.Handle(jsonResponse);
             }
+
+            return Task.CompletedTask;
         }
     }
 }

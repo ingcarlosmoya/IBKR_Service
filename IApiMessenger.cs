@@ -2,7 +2,7 @@
 {
     public interface IApiMessenger {
         Task<string> PostAsyncJsonResponse(string url, string jsonBody);
-        Task<string> GetAsyncJsonResponse(string url);
         Task<HttpResponseMessage> GetAsync(string url);
+        Task<HttpResponseMessage> PostAsync(string url, string jsonBody);
     }
 }

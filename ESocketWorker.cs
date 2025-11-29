@@ -1,6 +1,7 @@
 ﻿using IBApi;
 using IBKR_Service.Config;
 using IBKR_ServiceEWrapper;
+using IBKR_TradeBridge;
 using System;
 using System.Collections.Generic;
 using System.Linq;
